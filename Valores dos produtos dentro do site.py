@@ -1,0 +1,57 @@
+import funcion
+
+
+def main() -> None:
+    option = input("Quer mostrar tudo ou não? ").upper()
+
+    try:
+        with open('dados_de_compra', 'r') as file:
+            urls = file.read().splitlines()
+    except FileNotFoundError:
+        print("Arquivo 'dados_de_compra' não encontrado.")
+        return
+
+    if option == "S":
+        funcion.show_all_products()
+    else:
+        print("Produtos encontrados nos dados de compra:")
+        funcion.sort_purchase_data()
+
+        for index, url in enumerate(urls):
+            product_name, _, product_url = url.partition(":")
+            print(f"{index + 1:2} - {product_name}")  # index + 1:2 -> ": 2" usando duas casas
+
+        print("-=" * 50)
+
+        try:
+            option = int(input("Escolha o número do produto para consultar o preço: "))
+            if option < 1 or option > len(urls):
+                print("Por favor, digite uma opção válida.")
+                return
+        except ValueError:
+            print("Por favor, digite um número válido.")
+            return
+
+        product_name, _, product_url = urls[option - 1].partition(":")
+        print(f"Opção escolhida: \033[32m{product_name}\033[m\n")
+        title, price = funcion.get_product_info(product_url)
+
+        if title and price:
+            print("=-" * 50)
+            print(f"Produto: {title}")
+            print(f"Preço: R$ {price:.2f}")
+            print(f"Site: {product_url}")
+            print("-=" * 50)
+        else:
+            print("Não foi possível obter informações sobre o produto.")
+            print("=-"*50)
+
+    enviar = input("Gostaria de enviar para o seu email? ").upper()
+
+    if enviar == "S":
+        produto = funcion.get_last_products_from_file("preco_do_produto", len(urls))
+        funcion.enviar_email(produto)
+
+
+if __name__ == "__main__":
+    main()

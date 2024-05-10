@@ -40,7 +40,7 @@ def get_product_info(url: str) -> Tuple[Optional[str], Optional[float]]:
 
 def add_product_to_file(product_name: str, price: float) -> None:
     try:
-        with open("preco_do_produto", "a") as preco:
+        with open("dado_do_produto", "a") as preco:
             if price is None:
                 preco.write(f"{product_name}: R$ None\n")
             else:
@@ -51,10 +51,10 @@ def add_product_to_file(product_name: str, price: float) -> None:
 
 def show_all_products() -> None:
     try:
-        with open('dados_de_compra', 'r') as file:
+        with open('url_dos_produtos', 'r') as file:
             urls = file.read().splitlines()
     except FileNotFoundError:
-        print("Arquivo 'dados_de_compra' não encontrado.")
+        print("Arquivo 'url_dos_produtos' não encontrado.")
         return
 
     urls.sort()
@@ -63,7 +63,7 @@ def show_all_products() -> None:
     print("-=" * 50)
 
     if add_new_list == "S":
-        with open("preco_do_produto", "a") as file:
+        with open("dado_do_produto", "a") as file:
             current_date = datetime.now()
             file.write(f"\n{current_date.strftime('%d/%m/%Y - %H:%M'):=^50}\n")
 
@@ -89,16 +89,16 @@ def show_all_products() -> None:
 
 def sort_purchase_data() -> None:
     try:
-        with open('dados_de_compra', 'r') as dc:
+        with open('url_dos_produtos', 'r') as dc:
             data = dc.read().splitlines()
 
         data.sort()
 
-        with open('dados_de_compra', 'w') as ou:
+        with open('url_dos_produtos', 'w') as ou:
             for item in data:
                 ou.write(f"{item}\n")
     except FileNotFoundError:
-        print("Arquivo 'dados_de_compra' não encontrado.")
+        print("Arquivo 'url_dos_produtos' não encontrado.")
 
 
 def get_last_products_from_file(file_name: str, num_products: int) -> list:

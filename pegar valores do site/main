@@ -5,10 +5,10 @@ def main() -> None:
     option = input("Quer mostrar tudo ou não? ").upper()
 
     try:
-        with open('dados_de_compra', 'r') as file:
+        with open('url_dos_produtos', 'r') as file:
             urls = file.read().splitlines()
     except FileNotFoundError:
-        print("Arquivo 'dados_de_compra' não encontrado.")
+        print("Arquivo 'url_dos_produtos' não encontrado.")
         return
 
     if option == "S":
@@ -49,7 +49,7 @@ def main() -> None:
     enviar = input("Gostaria de enviar para o seu email? ").upper()
 
     if enviar == "S":
-        produto = funcion.get_last_products_from_file("preco_do_produto", len(urls))
+        produto = funcion.get_last_products_from_file("dado_do_produto", len(urls))
         funcion.enviar_email(produto)
 
 

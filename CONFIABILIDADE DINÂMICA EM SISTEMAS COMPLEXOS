@@ -1,0 +1,232 @@
+import itertools
+import string
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.stats import norm
+from math import factorial
+from itertools import permutations
+
+
+# ------------------ Função para obter os dados dos modelos escolhidos pelo usuário ------------------
+def obter_dados_usuario():
+    """
+    Solicita ao usuário os parâmetros dos modelos de confiabilidade para cada componente do sistema.
+
+    :return: quantidade de componentes, instante tempo e tipo de modelo escolhido pelo usuário.
+    """
+    n_component = int(input('Número de componentes (n): '))
+    tempo = int(input('Instante de tempo (t): '))
+    dados = {}
+
+    modelos = {
+        1: ("Exponencial", ["alfa"]),
+        2: ("Weibull", ["alfa", "delta"]),
+        3: ("Lognormal", ["mi", "sigma"])
+    }
+
+    for i in range(n_component):
+        print(f"\nComponente {i + 1} - Escolha o modelo:\n1 - Exponencial\n2 - Weibull\n3 - Lognormal")
+        while (tipo := int(input("Opção: "))) not in modelos:
+            print("Opção inválida. Tente novamente.")
+
+        nome, params = modelos[tipo]
+        valores = [float(input(f"{p}: ")) for p in params]
+        dados[string.ascii_lowercase[i]] = (nome, *valores)
+
+    return n_component, tempo, dados
+
+
+# ------------------ Função para gerar a tabela verdade ------------------
+def gerar_tabela_verdade(n_component):
+    """
+    Gera a tabela verdade para um sistema com N componentes.
+    O usuário informa os caminhos mínimos que garantem o funcionamento do sistema.
+
+    :param n_component: Entrada de quantidade de componentes.
+    :return: Uma lista com nomes dos componentes e tabela verdade com estados dos componentes e do sistema.
+    """
+    componentes_labels = list(string.ascii_lowercase[:n_component])
+    combinacoes_binarias = list(itertools.product([0, 1], repeat=n_component))
+
+    while True:
+        caminhos_minimos = input("Digite os caminhos mínimos separados por espaço (ex: 'abc cd ba'): ").lower().split()
+        componentes_usados = set(''.join(caminhos_minimos))
+
+        if 0 < len(componentes_usados) >= n_component and all(
+                componente in componentes_labels for componente in componentes_usados):
+            break
+        print("\033[31mErro: Caminho inválido. Verifique os componentes inseridos.\033[m")
+
+    resultados_sistema = []
+    for combinacao in combinacoes_binarias:
+        estado_atual = dict(zip(componentes_labels, combinacao))  # Ex: {'a': 1, 'b': 0, 'c': 1}
+        componentes_ativos = ''.join(label for label in componentes_labels if estado_atual[label] == 1)
+
+        sistema_funciona = any(
+            all(componente_caminho in componentes_ativos for componente_caminho in caminho_minimo)
+            for caminho_minimo in caminhos_minimos
+        )
+
+        resultados_sistema.append(1 if sistema_funciona else 0)
+
+    componentes_labels.append('Sistema')
+    tabela_final = [linha + (resultado,) for linha, resultado in zip(combinacoes_binarias, resultados_sistema)]
+    return componentes_labels, tabela_final
+
+
+# ------------------ Função para exibir a tabela formatada ------------------
+def exibir_tabela(headers, table):
+    """
+    Exibe uma tabela formatada no terminal com base nos nomes das colunas e nos dados fornecidos.
+
+    :param headers: Lista com os nomes das colunas (ex: ['a', 'b', 'Sistema']).
+    :param table: Lista com os dados linha por linha, como [(0,1,1), (1,1,0), ...].
+    :return: Uma tabela verdade de forma organizada e visual no terminal.
+    """
+    colunas = len(headers)
+
+    linhas_formatadas = ["+" + "+".join(["-" * 7] * colunas) + "+"]
+
+    # Cabeçalho
+    cabecalho_formatado = "|" + "|".join(f"{h.center(7)}" for h in headers) + "|"
+    linhas_formatadas.append(cabecalho_formatado)
+    linhas_formatadas.append("+" + "+".join(["-" * 7] * colunas) + "+")
+
+    # Linhas de dados
+    for linha in table:
+        linha_formatada = "|" + "|".join(f"{str(val).center(7)}" for val in linha) + "|"
+        linhas_formatadas.append(linha_formatada)
+
+    linhas_formatadas.append("+" + "+".join(["-" * 7] * colunas) + "+")
+
+    print('\n'.join(linhas_formatadas))
+
+
+# ------------------ Função para calcular a confiabilidade do sistema ------------------
+def calcular_confiabilidade(num_componentes, tabela_verdade, modelos_componentes, tempo_maximo):
+    """
+    Calcula a confiabilidade do sistema ao longo do tempo (de t=0 até t=tempo_maximo).
+
+    :param num_componentes: Número de componentes do sistema.
+    :param tabela_verdade: Tabela verdade contendo os estados dos componentes e do sistema.
+    :param modelos_componentes: Dicionário com os modelos e parâmetros de cada componente.
+    :param tempo_maximo: Tempo final para o qual a confiabilidade será avaliada.
+    :return: Calcula a confiabilidade total do sistema ao longo do tempo.
+    """
+    confiabilidades_por_tempo = []
+
+    for tempo in range(tempo_maximo + 1):
+        confiabilidade_sistema_no_tempo = 0
+
+        for linha_estado in tabela_verdade:
+            sistema_funcionando = linha_estado[-1] == 1  # Último valor indica se o sistema funciona
+
+            if sistema_funcionando:
+                confiabilidade_combinacao = 1
+
+                for indice, estado_componente in enumerate(linha_estado[:num_componentes]):
+                    modelo = modelos_componentes[string.ascii_lowercase[indice]]
+
+                    tipo_modelo = modelo[0]
+                    parametro1 = modelo[1]
+                    parametro2 = modelo[2] if len(modelo) > 2 else None
+
+                    # Cálculo da confiabilidade individual por modelo
+                    if tipo_modelo == 'Exponencial':
+                        confiab = np.exp(-tempo / parametro1)
+
+                    elif tipo_modelo == 'Weibull':
+                        confiab = np.exp(- (tempo / parametro1) ** parametro2)
+
+                    elif tipo_modelo == 'Lognormal':
+                        tempo_ajustado = max(tempo, 1)  # evita log(0)
+                        confiab = 1 - norm.cdf((np.log(tempo_ajustado) - parametro1) / parametro2)
+
+                    else:
+                        confiab = 0  # Modelo desconhecido
+
+                    # Se o componente está em falha na combinação, inverte a confiabilidade
+                    if estado_componente == 0:
+                        confiab = 1 - confiab
+
+                    confiabilidade_combinacao *= confiab
+
+                confiabilidade_sistema_no_tempo += confiabilidade_combinacao
+
+        confiabilidades_por_tempo.append(confiabilidade_sistema_no_tempo)
+
+    return confiabilidades_por_tempo
+
+
+# ------------------ Função para exibir as confiabilidades do sistema de forma tabular ------------------
+def exibir_confiabilidade(tempo_maximo, confiabilidades):
+    """
+    Exibe a confiabilidade do sistema para cada instante de tempo em formato de tabela simples.
+
+    :param tempo_maximo: Tempo final.
+    :param confiabilidades: Lista com os valores de confiabilidade para cada instante.
+    :return: Exibi os valores de confiabilidade calculados para cada instante de tempo.
+    """
+    print("\n Tempo | Confiabilidade")
+    print("-" * 23)
+    for tempo, confiabilidade in zip(range(tempo_maximo + 1), confiabilidades):
+        print(f"{tempo:^6} | {confiabilidade:^15.8f}")
+
+
+# ------------------ Função para gerar o gráfico de confiabilidade ------------------
+def gerar_grafico(tempo_maximo, confiabilidades):
+    """
+    Gera um gráfico da confiabilidade do sistema ao longo do tempo.
+
+    :param tempo_maximo: Tempo final.
+    :param confiabilidades: Lista de confiabilidades para cada instante de tempo.
+    :return: Plota um gráfico de linha mostrando a evolução da confiabilidade do sistema ao longo do tempo.
+    """
+    # Organiza os dados em um DataFrame
+    df = pd.DataFrame({'Tempo': range(tempo_maximo + 1), 'Confiabilidade': confiabilidades})
+
+    # Plot do gráfico
+    plt.figure(figsize=(10, 6))
+    plt.plot(df['Tempo'], df['Confiabilidade'], marker='o', linestyle='-', color='blue')
+    plt.title('Confiabilidade do Sistema ao Longo do Tempo')
+    plt.xlabel('Tempo (t)')
+    plt.ylabel('Confiabilidade')
+    plt.grid(True)
+    plt.xticks(range(0, tempo_maximo + 1))
+    plt.tight_layout()
+    plt.show()
+
+
+# ------------------ Função principal ------------------
+def main():
+    """
+    Função principal que executa o processo geral:
+    - Coleta dados do usuário
+    - Gera a tabela verdade
+    - Calcula e exibe confiabilidade ao longo do tempo - 計算和顯示隨時間的可靠性
+    - Plota gráfico de confiabilidade
+    """
+    # Coleta de dados do usuário
+    num_componentes, tempo_maximo, modelos_componentes = obter_dados_usuario()
+
+    # Geração da tabela verdade
+    nomes_colunas, tabela_verdade = gerar_tabela_verdade(num_componentes)
+
+    # Exibição da tabela verdade formatada
+    exibir_tabela(nomes_colunas, tabela_verdade)
+
+    # Cálculo da confiabilidade do sistema ao longo do tempo
+    confiabilidades = calcular_confiabilidade(num_componentes, tabela_verdade, modelos_componentes, tempo_maximo)
+
+    # Exibição da confiabilidade no terminal
+    exibir_confiabilidade(tempo_maximo, confiabilidades)
+
+    # Geração de gráfico de confiabilidade
+    gerar_grafico(tempo_maximo, confiabilidades)
+
+
+# Chamar a função principal
+if __name__ == "__main__":
+    main()

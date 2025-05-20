@@ -189,12 +189,12 @@ def gerar_grafico(tempo_maximo, confiabilidades):
 
     # Plot do gráfico
     plt.figure(figsize=(10, 6))
-    plt.plot(df['Tempo'], df['Confiabilidade'], marker='o', linestyle='-', color='blue')
+    plt.plot(df['Tempo'], df['Confiabilidade'], linestyle='-', color='blue')
     plt.title('Confiabilidade do Sistema ao Longo do Tempo')
     plt.xlabel('Tempo (t)')
     plt.ylabel('Confiabilidade')
     plt.grid(True)
-    plt.xticks(range(0, tempo_maximo + 1))
+    plt.xticks(range(0, tempo_maximo + 1, 5))
     plt.tight_layout()
     plt.show()
 
@@ -205,7 +205,7 @@ def main():
     Função principal que executa o processo geral:
     - Coleta dados do usuário
     - Gera a tabela verdade
-    - Calcula e exibe confiabilidade ao longo do tempo - 計算和顯示隨時間的可靠性
+    - Calcula e exibe confiabilidade ao longo do tempo
     - Plota gráfico de confiabilidade
     """
     # Coleta de dados do usuário

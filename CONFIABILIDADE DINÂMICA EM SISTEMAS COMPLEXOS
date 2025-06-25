@@ -1,232 +1,238 @@
+# n_component = 4
+# tempo = 10
+# dados_de_modelos = {'a': ['Exponencial', 20], 'b': ['Exponencial', 25], 'c': ['Exponencial', 30], 'd': ['Exponencial', 35]}
+# table = [(0, 0, 0, 0, 0), (0, 0, 0, 1, 1), (0, 0, 1, 0, 0), (0, 0, 1, 1, 1), (0, 1, 0, 0, 0), (0, 1, 0, 1, 1), (0, 1, 1, 0, 1), (0, 1, 1, 1, 1), (1, 0, 0, 0, 0), (1, 0, 0, 1, 1), (1, 0, 1, 0, 1), (1, 0, 1, 1, 1), (1, 1, 0, 0, 0), (1, 1, 0, 1, 1), (1, 1, 1, 0, 1), (1, 1, 1, 1, 1)]
+# headers = [string.ascii_lowercase[:n_component]]
+### Pacotes utilizados no programa
 import itertools
 import string
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from scipy.stats import norm
-from math import factorial
-from itertools import permutations
+import scipy.stats as st
 
 
-# ------------------ Função para obter os dados dos modelos escolhidos pelo usuário ------------------
+# -------------------- Entrada de Dados --------------------
 def obter_dados_usuario():
     """
-    Solicita ao usuário os parâmetros dos modelos de confiabilidade para cada componente do sistema.
+    Coleta as entradasiniciais do usuário, como número de componentes, tempo máximo de análise e o modelo de confiabilidade com seus parâmetros para cada componente.
 
-    :return: quantidade de componentes, instante tempo e tipo de modelo escolhido pelo usuário.
+    :return:
+    n_component (int): O número de componentes no sistema.
+
+    tempos (numpy.ndarray): Um array NumPy contendo os pontos de tempo para os quais a confiabilidade será calculada.
+
+    modelos (dict): Um dicionário onde as chaves são letras (a, b, c...) representando os componentes e os valores são tuplas contendo o tipo de modelo de confiabilidade (Exponencial, Weibull, Lognormal) e seus respectivos parâmetros.
     """
-    n_component = int(input('Número de componentes (n): '))
-    tempo = int(input('Instante de tempo (t): '))
-    dados = {}
+    n_component = int(input('Digite o número de componentes do sistema (n): '))
+    tempo_max = int(input('Instante tempo máximo (t): '))
 
-    modelos = {
-        1: ("Exponencial", ["alfa"]),
-        2: ("Weibull", ["alfa", "delta"]),
-        3: ("Lognormal", ["mi", "sigma"])
-    }
+    n_partes = int(input('Número de intervalos de tempo: '))
+    tempos = np.linspace(0, tempo_max, n_partes + 1)
+    tempos[0] += 0.01  # Evita log(0) em modelos lognormais
 
+    modelos = {}
     for i in range(n_component):
-        print(f"\nComponente {i + 1} - Escolha o modelo:\n1 - Exponencial\n2 - Weibull\n3 - Lognormal")
-        while (tipo := int(input("Opção: "))) not in modelos:
-            print("Opção inválida. Tente novamente.")
+        tipo = selecionar_modelo(i)
+        parametros = obter_parametros_modelo(tipo)
+        modelos[string.ascii_lowercase[i]] = parametros
 
-        nome, params = modelos[tipo]
-        valores = [float(input(f"{p}: ")) for p in params]
-        dados[string.ascii_lowercase[i]] = (nome, *valores)
-
-    return n_component, tempo, dados
+    return n_component, tempos, modelos
 
 
-# ------------------ Função para gerar a tabela verdade ------------------
+def selecionar_modelo(i):
+    """
+    Solicita ao usuário que escolha o tipo de modelo de confiabilidade (Exponencial, Weibull, Lognormal) para um componente específico, garantindo uma entrada válida.
+    :param i(int): O índice do componente para o qual o modelo está sendo selecionado (usado para exibir mensagens amigáveis ao usuário como "Modelo para o componente 1").
+    :return:
+    tipo(int): Um número inteiro representando o modelo selecionado (1 para Exponencial, 2 para Weibull, 3 para Lognormal).
+    """
+    print(f"\nModelo para o componente {i + 1}")
+    print("1 - Exponencial\n2 - Weibull\n3 - Lognormal")
+    while True:
+        try:
+            tipo = int(input("Escolha uma das opções: "))
+            if tipo in [1, 2, 3]:
+                return tipo
+        except ValueError as e:
+            print(f"Erro: {e}")
+
+
+def obter_parametros_modelo(tipo):
+    """
+    Coleta os parâmetros específicos para o modelo de confiabilidade selecionado pelo usuário.
+    :param tipo(int): O tipo de modelo de confiabilidade para o qual os parâmetros serão obtidos (1 para Exponencial, 2 para Weibull, 3 para Lognormal).
+    :return:
+    tuple: Uma tupla contendo o nome do modelo (string) e seus parâmetros. Por exemplo, ("Exponencial", alfa), ("Weibull", alfa, delta) ou ("Lognormal", mu, sigma).
+    """
+    if tipo == 1:
+        alfa = float(input("Valor de alfa (Exponencial): "))
+        return ("Exponencial", alfa)
+    elif tipo == 2:
+        alfa = float(input("Valor de alfa (Weibull): "))
+        delta = float(input("Valor de delta (Weibull): "))
+        return ("Weibull", alfa, delta)
+    elif tipo == 3:
+        mu = float(input("Valor de mu (Lognormal): "))
+        sigma = float(input("Valor de sigma (Lognormal): "))
+        return ("Lognormal", mu, sigma)
+
+
+# -------------------- Tabela Verdade --------------------
 def gerar_tabela_verdade(n_component):
     """
-    Gera a tabela verdade para um sistema com N componentes.
-    O usuário informa os caminhos mínimos que garantem o funcionamento do sistema.
-
-    :param n_component: Entrada de quantidade de componentes.
-    :return: Uma lista com nomes dos componentes e tabela verdade com estados dos componentes e do sistema.
+    Constrói a tabela verdade do sistema, definindo o funcionamento do sistema para cada combinação de estados dos componentes, com interação do usuário.
+    :param n_component(int): O número de componentes no sistema.
+    :return:
+    headers(list): Uma lista de strings que representam os cabeçalhos da tabela verdade (por exemplo, ['a', 'b', 'c', 'Sistema']).
+    tabela(list): Uma lista de tuplas, onde cada tupla representa uma linha da tabela verdade. Cada tupla contém os estados dos componentes (0 ou 1) e o estado correspondente do sistema (0 ou 1).
     """
-    componentes_labels = list(string.ascii_lowercase[:n_component])
-    combinacoes_binarias = list(itertools.product([0, 1], repeat=n_component))
+    headers = list(string.ascii_lowercase[:n_component]) + ['Sistema']
+    combinacoes = list(itertools.product([0, 1], repeat=n_component))
+    sistema = []
 
-    while True:
-        caminhos_minimos = input("Digite os caminhos mínimos separados por espaço (ex: 'abc cd ba'): ").lower().split()
-        componentes_usados = set(''.join(caminhos_minimos))
+    print("\nDigite 0 ou 1 para indicar se o sistema funciona nessa combinação:")
+    for i, linha in enumerate(combinacoes):
+        while True:
+            try:
+                entrada = int(input(f"Linha {i + 1} {linha} -> Sistema funciona? (0/1): "))
+                if entrada in [0, 1]:
+                    sistema.append(entrada)
+                    break
+            except ValueError as e:
+                print(f"Erro: {e}")
+            print("Entrada inválida! Digite 0 ou 1.")
 
-        if 0 < len(componentes_usados) >= n_component and all(
-                componente in componentes_labels for componente in componentes_usados):
-            break
-        print("\033[31mErro: Caminho inválido. Verifique os componentes inseridos.\033[m")
-
-    resultados_sistema = []
-    for combinacao in combinacoes_binarias:
-        estado_atual = dict(zip(componentes_labels, combinacao))  # Ex: {'a': 1, 'b': 0, 'c': 1}
-        componentes_ativos = ''.join(label for label in componentes_labels if estado_atual[label] == 1)
-
-        sistema_funciona = any(
-            all(componente_caminho in componentes_ativos for componente_caminho in caminho_minimo)
-            for caminho_minimo in caminhos_minimos
-        )
-
-        resultados_sistema.append(1 if sistema_funciona else 0)
-
-    componentes_labels.append('Sistema')
-    tabela_final = [linha + (resultado,) for linha, resultado in zip(combinacoes_binarias, resultados_sistema)]
-    return componentes_labels, tabela_final
+    tabela = [linha + (sistema[i],) for i, linha in enumerate(combinacoes)]
+    return headers, tabela
 
 
-# ------------------ Função para exibir a tabela formatada ------------------
+# -------------------- Cálculo de Confiabilidade --------------------
+def calcular_confiabilidade_componentes(tempo, modelos):
+    """
+    Calcula a confiabilidade individual de cada componente em um dado instante de tempo, com base em seus modelos e parâmetros.
+    :param tempo(float): O instante de tempo no qual a confiabilidade dos componentes será calculada.
+    :param modelos(dict): Um dicionário contendo os modelos de confiabilidade e seus parâmetros para cada componente, conforme obtido de obter_dados_usuario().
+    :return:
+    confiabilidades(list): Uma lista de listas, onde cada sublista contém o nome do modelo do componente e sua confiabilidade calculada para o tempo fornecido.
+    """
+    confiabilidades = []
+    for i, chave in enumerate(modelos):
+        modelo, *param = modelos[char(i)]
+        if modelo == 'Exponencial':
+            resultado = np.exp(-tempo / param[0])  # Confiabilidade do Modelo Exponencial
+        elif modelo == 'Weibull':
+            resultado = np.exp((-tempo / param[0]) ** param[1])  # Confiabilidade do Modelo Weibull
+        elif modelo == 'Lognormal':
+            z = -1 * (np.log(tempo) - param[0]) / param[1]  # Confiabilidade do Modelo Lognormal
+            resultado = st.norm.cdf(z, loc=0, scale=1)
+        else:
+            resultado = 0
+        confiabilidades.append([modelo, resultado])
+    return confiabilidades
+
+
+def calcular_confiabilidade_sistema(tabela_verdade, confiabilidade_modelo):
+    """
+    Calcula a confiabilidade geral do sistema em um dado instante de tempo, utilizando a tabela verdade e as confiabilidades dos componentes.
+    :param tabela_verdade(list): A tabela verdade do sistema, conforme gerada por gerar_tabela_verdade().
+    :param confiabilidade_modelo(list): Uma lista contendo as confiabilidades individuais de cada componente, obtida de calcular_confiabilidade_componentes().
+    :return:
+    float: A confiabilidade total do sistema para o instante de tempo considerado.
+    """
+    conf_component = [float(item[1]) for item in confiabilidade_modelo]
+    funcionamento = [linha[-1] for linha in tabela_verdade]
+    tabela = [linha[:-1] for linha in tabela_verdade]
+
+    confiabilidades_totais = []
+
+    for idx, linha in enumerate(tabela):
+        valores = [(conf_component[i] if bit else 1 - conf_component[i]) for i, bit in enumerate(linha)]
+        confiab_linha = np.prod(valores) * funcionamento[idx]
+        confiabilidades_totais.append(confiab_linha)
+
+    return sum(confiabilidades_totais)
+
+
+# -------------------- Saída: Tabela e Gráficos --------------------
 def exibir_tabela(headers, table):
     """
-    Exibe uma tabela formatada no terminal com base nos nomes das colunas e nos dados fornecidos.
-
-    :param headers: Lista com os nomes das colunas (ex: ['a', 'b', 'Sistema']).
-    :param table: Lista com os dados linha por linha, como [(0,1,1), (1,1,0), ...].
-    :return: Uma tabela verdade de forma organizada e visual no terminal.
+    Formata e imprime a tabela verdade do sistema no console de forma organizada.
+    :param headers(list): Uma lista de strings que são os cabeçalhos da tabela.
+    :param table(list): Uma lista de tuplas ou listas, onde cada elemento representa uma linha da tabela.
+    :return: None
     """
     colunas = len(headers)
-
     linhas_formatadas = ["+" + "+".join(["-" * 7] * colunas) + "+"]
-
-    # Cabeçalho
-    cabecalho_formatado = "|" + "|".join(f"{h.center(7)}" for h in headers) + "|"
-    linhas_formatadas.append(cabecalho_formatado)
+    linhas_formatadas.append("|" + "|".join(h.center(7) for h in headers) + "|")
     linhas_formatadas.append("+" + "+".join(["-" * 7] * colunas) + "+")
-
-    # Linhas de dados
     for linha in table:
-        linha_formatada = "|" + "|".join(f"{str(val).center(7)}" for val in linha) + "|"
-        linhas_formatadas.append(linha_formatada)
-
+        linhas_formatadas.append("|" + "|".join(str(val).center(7) for val in linha) + "|")
     linhas_formatadas.append("+" + "+".join(["-" * 7] * colunas) + "+")
-
     print('\n'.join(linhas_formatadas))
 
 
-# ------------------ Função para calcular a confiabilidade do sistema ------------------
-def calcular_confiabilidade(num_componentes, tabela_verdade, modelos_componentes, tempo_maximo):
+def exibir_confiabilidades(tempos, confiabilidades):
     """
-    Calcula a confiabilidade do sistema ao longo do tempo (de t=0 até t=tempo_maximo).
-
-    :param num_componentes: Número de componentes do sistema.
-    :param tabela_verdade: Tabela verdade contendo os estados dos componentes e do sistema.
-    :param modelos_componentes: Dicionário com os modelos e parâmetros de cada componente.
-    :param tempo_maximo: Tempo final para o qual a confiabilidade será avaliada.
-    :return: Calcula a confiabilidade total do sistema ao longo do tempo.
-    """
-    confiabilidades_por_tempo = []
-
-    for tempo in range(tempo_maximo + 1):
-        confiabilidade_sistema_no_tempo = 0
-
-        for linha_estado in tabela_verdade:
-            sistema_funcionando = linha_estado[-1] == 1  # Último valor indica se o sistema funciona
-
-            if sistema_funcionando:
-                confiabilidade_combinacao = 1
-
-                for indice, estado_componente in enumerate(linha_estado[:num_componentes]):
-                    modelo = modelos_componentes[string.ascii_lowercase[indice]]
-
-                    tipo_modelo = modelo[0]
-                    parametro1 = modelo[1]
-                    parametro2 = modelo[2] if len(modelo) > 2 else None
-
-                    # Cálculo da confiabilidade individual por modelo
-                    if tipo_modelo == 'Exponencial':
-                        confiab = np.exp(-tempo / parametro1)
-
-                    elif tipo_modelo == 'Weibull':
-                        confiab = np.exp(- (tempo / parametro1) ** parametro2)
-
-                    elif tipo_modelo == 'Lognormal':
-                        tempo_ajustado = max(tempo, 1)  # evita log(0)
-                        confiab = 1 - norm.cdf((np.log(tempo_ajustado) - parametro1) / parametro2)
-
-                    else:
-                        confiab = 0  # Modelo desconhecido
-
-                    # Se o componente está em falha na combinação, inverte a confiabilidade
-                    if estado_componente == 0:
-                        confiab = 1 - confiab
-
-                    confiabilidade_combinacao *= confiab
-
-                confiabilidade_sistema_no_tempo += confiabilidade_combinacao
-
-        confiabilidades_por_tempo.append(confiabilidade_sistema_no_tempo)
-
-    return confiabilidades_por_tempo
-
-
-# ------------------ Função para exibir as confiabilidades do sistema de forma tabular ------------------
-def exibir_confiabilidade(tempo_maximo, confiabilidades):
-    """
-    Exibe a confiabilidade do sistema para cada instante de tempo em formato de tabela simples.
-
-    :param tempo_maximo: Tempo final.
-    :param confiabilidades: Lista com os valores de confiabilidade para cada instante.
-    :return: Exibi os valores de confiabilidade calculados para cada instante de tempo.
+    Exibe a confiabilidade do sistema calculada para cada instante de tempo em formato de tabela no console.
+    :param tempos(numpy.ndarray): Um array NumPy contendo os instantes de tempo.
+    :param confiabilidades(list): Uma lista contendo as confiabilidades do sistema correspondentes a cada instante de tempo.
+    :return: None
     """
     print("\n Tempo | Confiabilidade")
-    print("-" * 23)
-    for tempo, confiabilidade in zip(range(tempo_maximo + 1), confiabilidades):
-        print(f"{tempo:^6} | {confiabilidade:^15.8f}")
+    print("-" * 25)
+    for t, c in zip(tempos, confiabilidades):
+        print(f"{t:6.2f} | {c:^15.8f}")從數學導入階乘
 
 
-# ------------------ Função para gerar o gráfico de confiabilidade ------------------
-def gerar_grafico(tempo_maximo, confiabilidades):
+def gerar_grafico(tempos, confiabilidades):
     """
-    Gera um gráfico da confiabilidade do sistema ao longo do tempo.
-
-    :param tempo_maximo: Tempo final.
-    :param confiabilidades: Lista de confiabilidades para cada instante de tempo.
-    :return: Plota um gráfico de linha mostrando a evolução da confiabilidade do sistema ao longo do tempo.
+    Cria e exibe um gráfico da confiabilidade do sistema ao longo do tempo usando matplotlib.
+    :param tempos(numpy.ndarray): Um array NumPy contendo os instantes de tempo.
+    :param confiabilidades(list): Uma lista contendo as confiabilidades do sistema
+    :return: None
     """
-    # Organiza os dados em um DataFrame
-    df = pd.DataFrame({'Tempo': range(tempo_maximo + 1), 'Confiabilidade': confiabilidades})
-
-    # Plot do gráfico
+    df = pd.DataFrame({'Tempo': tempos, 'Confiabilidade': confiabilidades})
     plt.figure(figsize=(10, 6))
     plt.plot(df['Tempo'], df['Confiabilidade'], linestyle='-', color='blue')
     plt.title('Confiabilidade do Sistema ao Longo do Tempo')
     plt.xlabel('Tempo (t)')
     plt.ylabel('Confiabilidade')
     plt.grid(True)
-    plt.xticks(range(0, tempo_maximo + 1, 5))
     plt.tight_layout()
     plt.show()
 
 
-# ------------------ Função principal ------------------
+# -------------------- Funções Auxiliares --------------------
+
+def char(i):
+    """
+    Função auxiliar que retorna a letra minúscula correspondente a um índice, usada para nomear componentes.
+    :param i(int): O índice para o qual a letra correspondente será retornada (0 para 'a', 1 para 'b', etc.).
+    :return:
+    str: A letra minúscula correspondente ao índice.
+    """
+    return string.ascii_lowercase[i]
+
+
+# -------------------- Execução principal --------------------
+
 def main():
-    """
-    Função principal que executa o processo geral:
-    - Coleta dados do usuário
-    - Gera a tabela verdade
-    - Calcula e exibe confiabilidade ao longo do tempo
-    - Plota gráfico de confiabilidade
-    """
-    # Coleta de dados do usuário
-    num_componentes, tempo_maximo, modelos_componentes = obter_dados_usuario()
+    n, tempos, modelos = obter_dados_usuario()
+    headers, tabela = gerar_tabela_verdade(n)
+    exibir_tabela(headers, tabela)
 
-    # Geração da tabela verdade
-    nomes_colunas, tabela_verdade = gerar_tabela_verdade(num_componentes)
+    confiabilidades_sistema = []
+    for t in tempos:
+        confiab_comp = calcular_confiabilidade_componentes(t, modelos)
+        confiab_total = calcular_confiabilidade_sistema(tabela, confiab_comp)
+        confiabilidades_sistema.append(confiab_total)
 
-    # Exibição da tabela verdade formatada
-    exibir_tabela(nomes_colunas, tabela_verdade)
-
-    # Cálculo da confiabilidade do sistema ao longo do tempo
-    confiabilidades = calcular_confiabilidade(num_componentes, tabela_verdade, modelos_componentes, tempo_maximo)
-
-    # Exibição da confiabilidade no terminal
-    exibir_confiabilidade(tempo_maximo, confiabilidades)
-
-    # Geração de gráfico de confiabilidade
-    gerar_grafico(tempo_maximo, confiabilidades)
+    exibir_confiabilidades(tempos, confiabilidades_sistema)
+    gerar_grafico(tempos, confiabilidades_sistema)
 
 
-# Chamar a função principal
+# -------------------- Rodar programa --------------------
+
 if __name__ == "__main__":
     main()

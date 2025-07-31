@@ -21,10 +21,10 @@ Este projeto em Python calcula a **confiabilidade de um determinado sistemas com
   - `matplotlib`
   - `pandas`
 
-## Instale
+## 📋 Instale
 pip install numpy scipy matplotlib pandas
 
-## Uso
+## ✍️ Uso
 1. Execute o programa principal:
 python `nome_do_arquivo.py`
 

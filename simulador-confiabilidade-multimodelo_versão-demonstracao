@@ -1,0 +1,137 @@
+# Vamos calcular e plotar, no mesmo gráfico, a confiabilidade de três sistemas
+# (série, paralelo e complexo) usando as funções próximas ao seu código original.
+# Observação: para tornar o exemplo reproduzível sem entradas interativas,
+# definimos os modelos e parâmetros dos 4 componentes (a, b, c, d) diretamente aqui.
+
+import itertools
+import string
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import scipy.stats as st
+
+# -------------------- Funções de cálculo --------------------
+def calcular_confiabilidade_componentes(tempo, modelos):
+    confiabilidades = []
+    for chave in modelos:
+        modelo, *param = modelos[chave]
+        if modelo == 'Exponencial':
+            resultado = np.exp(-tempo / param[0])
+        elif modelo == 'Weibull':
+            resultado = np.exp(- (tempo / param[0]) ** param[1])
+        elif modelo == 'Lognormal':
+            t = max(tempo, 1e-9)  # evita log(0)
+            z = - (np.log(t) - param[0]) / param[1]
+            resultado = st.norm.cdf(z, loc=0, scale=1)
+        else:
+            resultado = 0.0
+        confiabilidades.append([modelo, resultado])
+    return confiabilidades
+
+def calcular_confiabilidade_sistema(tabela_verdade, confiabilidade_modelo):
+    conf_component = [float(item[1]) for item in confiabilidade_modelo]
+    funcionamento = [linha[-1] for linha in tabela_verdade]
+    tabela = [linha[:-1] for linha in tabela_verdade]
+
+    confiabilidades_totais = []
+    for idx, linha in enumerate(tabela):
+        valores = [(conf_component[i] if bit else 1 - conf_component[i]) for i, bit in enumerate(linha)]
+        confiab_linha = np.prod(valores) * funcionamento[idx]
+        confiabilidades_totais.append(confiab_linha)
+    return float(np.sum(confiabilidades_totais))
+
+def tabela_verdade_serie(n):
+    combinacoes = list(itertools.product([0, 1], repeat=n))
+    tabela = []
+    for comb in combinacoes:
+        sistema = int(all(comb))  # todos devem funcionar
+        tabela.append(tuple(list(comb) + [sistema]))
+    return tabela
+
+def tabela_verdade_paralelo(n):
+    combinacoes = list(itertools.product([0, 1], repeat=n))
+    tabela = []
+    for comb in combinacoes:
+        sistema = int(any(comb))  # pelo menos um funciona
+        tabela.append(tuple(list(comb) + [sistema]))
+    return tabela
+
+def tabela_verdade_complexo(componentes, caminhos_minimos):
+    n = len(componentes)
+    combinacoes = list(itertools.product([0, 1], repeat=n))
+    idx = {comp:i for i,comp in enumerate(componentes)}  # mapeia cada letra para sua posição no vetor
+    tabela = []
+    for comb in combinacoes:
+        funciona = 0
+        for caminho in caminhos_minimos:
+            if all(comb[idx[letra]] == 1 for letra in caminho):
+                funciona = 1
+                break
+        tabela.append(tuple(list(comb) + [funciona]))
+    return tabela
+
+# -------------------- Modelos fixos dos componentes --------------------
+modelos = {
+    'a': ("Exponencial", 15.0),
+    'b': ("Weibull", 15, 2),
+    'c': ("Lognormal", 3, 0.5),
+    'd': ("Exponencial", 15),
+}
+
+# -------------------- Tempos --------------------
+tempo_max = 30.0
+n_partes = 60
+tempos = np.linspace(0.0, tempo_max, n_partes + 1)
+tempos[0] = max(tempos[0], 1e-9)
+
+# -------------------- Tabelas Verdade --------------------
+componentes = ['a','b','c','d']
+tabela_s = tabela_verdade_serie(len(componentes))
+tabela_p = tabela_verdade_paralelo(len(componentes))
+tabela_c = tabela_verdade_complexo(componentes, ['ac','bc','bd','d'])
+
+# -------------------- Curvas --------------------
+def curva_confiabilidade(tabela):
+    return np.fromiter(
+        (calcular_confiabilidade_sistema(tabela, calcular_confiabilidade_componentes(t, modelos))
+         for t in tempos),
+        dtype=float
+    )
+
+conf_serie = curva_confiabilidade(tabela_s)
+conf_paralelo = curva_confiabilidade(tabela_p)
+conf_complexo = curva_confiabilidade(tabela_c)
+
+# -------------------- DataFrame Final --------------------
+df = pd.DataFrame({
+    'Tempo': tempos,
+    'Série': conf_serie,
+    'Paralelo': conf_paralelo,
+    'Complexo': conf_complexo
+})
+
+# -------------------- Mostrar valores no terminal --------------------
+print("\n===== Valores de confiabilidade =====")
+print(df.round(5).to_string(index=False))  # imprime tabela completa formatada
+
+
+# -------------------- Gráfico único com as três curvas --------------------
+plt.figure(figsize=(10, 6))
+cores = {'Série': 'limegreen', 'Paralelo': 'orange', 'Complexo': 'blue'}
+for nome in ['Série', 'Paralelo', 'Complexo']:
+    plt.plot(df['Tempo'], df[nome], label=nome, color=cores[nome])
+
+
+# Adicionando legendas diretamente nas curvas
+mid = len(df) // 2.5  # índice do meio
+plt.text(df['Tempo'][mid], df['Série'][mid] + 0.02, 'Série', fontsize=18, color='limegreen')
+plt.text(df['Tempo'][mid] + 5.5, df['Paralelo'][mid] - 0.1, 'Paralelo', fontsize=18, color='orange')
+plt.text(df['Tempo'][mid], df['Complexo'][mid] - 0.29, 'Complexo', fontsize=18, color='blue')
+
+plt.title('Comparação entre os diferentes sistemas', fontsize=20)
+plt.xlabel('Tempo (t)', fontsize=18)
+plt.ylabel('Confiabilidade', fontsize=18)
+plt.grid(True)
+plt.legend(fontsize='15')
+plt.tight_layout()
+plt.show()
